@@ -3,16 +3,20 @@ import sys
 import time
 import random
 import pyttsx3
+from io import BytesIO
+from pydub import AudioSegment
+from pydub.playback import play
+from pydub.generators import WhiteNoise
+import wave
+import os
+import simpleaudio as sa
+
 
 # Initialize Pygame
 pygame.init()
 
 # Initialize Text-to-Speech engine
 tts_engine = pyttsx3.init()
-
-# Test TTS engine
-tts_engine.say("Welcome to the darkroom.")
-tts_engine.runAndWait()
 
 # Screen dimensions
 SCREEN_WIDTH = 800
@@ -45,6 +49,64 @@ current_scene_items = ["flashlight", "key"]
 # Flashlight state
 flashlight_on = False
 
+# Function to apply rough and distorted effect
+def apply_audio_effects(audio_segment):
+    # Apply effects: increase volume, add distortion
+    audio_segment = audio_segment + 1  # Increase volume
+    audio_segment = audio_segment.high_pass_filter(30)
+    audio_segment = audio_segment.low_pass_filter(300)
+    audio_segment = audio_segment.speedup(playback_speed=1.1)
+    # Add white noise
+    noise = WhiteNoise().to_audio_segment(duration=len(audio_segment))
+    audio_segment = audio_segment.overlay(noise - 40)  # Adjust noise volume
+    audio_segment = audio_segment.set_frame_rate(8000).set_sample_width(1)
+    
+    return audio_segment
+
+# Function to speak text with effects
+def speak_with_effects(text):
+    try:
+        print(f"Speaking text: {text}")
+        # Generate TTS audio and store it in an in-memory buffer
+        buffer = BytesIO()
+        tts_engine.save_to_file(text, "temp.wav")
+        tts_engine.runAndWait()
+        print("TTS audio saved to temp.wav")
+    
+        # Read the saved file into the buffer
+        with open("temp.wav", "rb") as f:
+            buffer.write(f.read())
+        buffer.seek(0)
+        print("TTS audio loaded from temp.wav")
+
+        # Load audio from buffer
+        sound = AudioSegment.from_file(buffer, format="wav")
+        print("Audio loaded from buffer")
+
+        # Apply effects
+        modified_sound = apply_audio_effects(sound)
+        print("Effects applied")
+
+        # Export modified sound to a new buffer
+        modified_buffer = BytesIO()
+        modified_sound.export(modified_buffer, format="wav")
+        modified_buffer.seek(0)
+        print("Modified audio exported to buffer")
+
+        # Play the modified sound using simpleaudio
+        with wave.open(modified_buffer, 'rb') as wf:
+            wave_obj = sa.WaveObject.from_wave_read(wf)
+            play_obj = wave_obj.play()
+            play_obj.wait_done()  # Wait until sound has finished playing
+            print("Modified audio played successfully")
+    except Exception as e:
+        print(f"Error: {e}")
+    finally:
+        if os.path.exists("temp.wav"):
+            print("Deleting temp.wav...")
+            os.remove("temp.wav")
+
+
 # Function to wrap text
 def wrap_text(text, font, max_width):
     words = text.split(' ')
@@ -63,12 +125,12 @@ def wrap_text(text, font, max_width):
     return lines
 
 # Function to add text to the terminal
-def add_output(text):
-    for line in text.split('\n'):
-        wrapped_lines = wrap_text(line, FONT, TEXT_AREA_WIDTH - 20)
-        output_lines.extend(wrapped_lines)
-        tts_engine.say(text)  # Speak the line using Text-to-Speech
-        tts_engine.runAndWait()
+def add_output(text, is_dialogue=False):
+    global output_lines
+    wrapped_lines = wrap_text(text, FONT, TEXT_AREA_WIDTH - 20)
+    output_lines.extend(wrapped_lines)
+    if is_dialogue:
+        speak_with_effects(text)  # Speak the line using Text-to-Speech with effects
     max_lines = (SCREEN_HEIGHT - 60) // LINE_HEIGHT  # Adjust to leave space for input
     while len(output_lines) > max_lines:
         output_lines.pop(0)
@@ -82,51 +144,36 @@ def process_command(command):
         running = False
     elif command.lower() == "look":
         if flashlight_on:
-            add_output("You see a dark, empty room. It's unsettlingly quiet. With the flashlight on, you notice a hidden door in the corner.")
+            add_output("You see a dark, empty room. It's unsettlingly quiet. With the flashlight on, you notice a hidden door in the corner.", is_dialogue=True)
         else:
-            add_output("You see a dark, empty room. It's unsettlingly quiet.")
+            add_output("You see a dark, empty room. It's unsettlingly quiet.", is_dialogue=True)
             if current_scene_items:
-                add_output("You see the following items: " + ", ".join(current_scene_items))
+                add_output("You see the following items: " + ", ".join(current_scene_items), is_dialogue=True)
             else:
-                add_output("There are no items here.")
+                add_output("There are no items here.", is_dialogue=True)
     elif command.lower() == "scream":
-        add_output("You scream into the void. Nothing happens.")
+        add_output("You scream into the void. Nothing happens.", is_dialogue=True)
     elif command.lower() == "inventory":
         if inventory:
-            add_output("You are carrying: " + ", ".join(inventory))
+            add_output("You are carrying: " + ", ".join(inventory), is_dialogue=True)
         else:
-            add_output("You are not carrying anything.")
+            add_output("You are not carrying anything.", is_dialogue=True)
     elif command.lower().startswith("take "):
         item = command[5:].strip()
         if item in current_scene_items:
             inventory.append(item)
             current_scene_items.remove(item)
-            add_output(f"You take the {item}.")
+            add_output(f"You take the {item}.", is_dialogue=True)
         else:
-            add_output(f"You can't take the {item}. It's not here.")
+            add_output(f"You can't take the {item}. It's not here.", is_dialogue=True)
     elif command.lower().startswith("drop "):
         item = command[5:].strip()
         if item in inventory:
             inventory.remove(item)
             current_scene_items.append(item)
-            add_output(f"You drop the {item}.")
+            add_output(f"You drop the {item}.", is_dialogue=True)
         else:
-            add_output("You don't have that item.")
-    elif command.lower().startswith("use "):
-        item = command[4:].strip()
-        if item in inventory:
-            if item == "flashlight":
-                flashlight_on = not flashlight_on
-                if flashlight_on:
-                    add_output("You turn on the flashlight.")
-                else:
-                    add_output("You turn off the flashlight.")
-            else:
-                add_output(f"You use the {item}.")
-        else:
-            add_output(f"You don't have a {item}.")
-    else:
-        add_output("Unknown command.")
+            add_output("You don't have that item.", is_dialogue=True)
 
     # Random chance for glitch effect
     if random.random() < 0.1:  # 10% chance
