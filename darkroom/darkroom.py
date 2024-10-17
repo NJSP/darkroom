@@ -22,7 +22,7 @@ IMAGE_AREA_WIDTH = SCREEN_WIDTH - TEXT_AREA_WIDTH
 
 # Colors
 BLACK = (0, 0, 0)
-WHITE = (255, 255, 255)  # Changed text color to white
+WHITE = (255, 255, 255)
 
 # Fonts
 FONT = pygame.font.Font(pygame.font.match_font('courier'), 20)  # Reduced font size
