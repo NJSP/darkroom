@@ -2,21 +2,12 @@ import pygame
 import sys
 import time
 import random
-import pyttsx3
-from io import BytesIO
-from pydub import AudioSegment
-from pydub.playback import play
-from pydub.generators import WhiteNoise
 import wave
 import os
-import simpleaudio as sa
 
 
 # Initialize Pygame
 pygame.init()
-
-# Initialize Text-to-Speech engine
-tts_engine = pyttsx3.init()
 
 # Screen dimensions
 SCREEN_WIDTH = 800
@@ -49,64 +40,6 @@ current_scene_items = ["flashlight", "key"]
 # Flashlight state
 flashlight_on = False
 
-# Function to apply rough and distorted effect
-def apply_audio_effects(audio_segment):
-    # Apply effects: increase volume, add distortion
-    audio_segment = audio_segment + 1  # Increase volume
-    audio_segment = audio_segment.high_pass_filter(30)
-    audio_segment = audio_segment.low_pass_filter(300)
-    audio_segment = audio_segment.speedup(playback_speed=1.1)
-    # Add white noise
-    noise = WhiteNoise().to_audio_segment(duration=len(audio_segment))
-    audio_segment = audio_segment.overlay(noise - 40)  # Adjust noise volume
-    audio_segment = audio_segment.set_frame_rate(8000).set_sample_width(1)
-    
-    return audio_segment
-
-# Function to speak text with effects
-def speak_with_effects(text):
-    try:
-        print(f"Speaking text: {text}")
-        # Generate TTS audio and store it in an in-memory buffer
-        buffer = BytesIO()
-        tts_engine.save_to_file(text, "temp.wav")
-        tts_engine.runAndWait()
-        print("TTS audio saved to temp.wav")
-    
-        # Read the saved file into the buffer
-        with open("temp.wav", "rb") as f:
-            buffer.write(f.read())
-        buffer.seek(0)
-        print("TTS audio loaded from temp.wav")
-
-        # Load audio from buffer
-        sound = AudioSegment.from_file(buffer, format="wav")
-        print("Audio loaded from buffer")
-
-        # Apply effects
-        modified_sound = apply_audio_effects(sound)
-        print("Effects applied")
-
-        # Export modified sound to a new buffer
-        modified_buffer = BytesIO()
-        modified_sound.export(modified_buffer, format="wav")
-        modified_buffer.seek(0)
-        print("Modified audio exported to buffer")
-
-        # Play the modified sound using simpleaudio
-        with wave.open(modified_buffer, 'rb') as wf:
-            wave_obj = sa.WaveObject.from_wave_read(wf)
-            play_obj = wave_obj.play()
-            play_obj.wait_done()  # Wait until sound has finished playing
-            print("Modified audio played successfully")
-    except Exception as e:
-        print(f"Error: {e}")
-    finally:
-        if os.path.exists("temp.wav"):
-            print("Deleting temp.wav...")
-            os.remove("temp.wav")
-
-
 # Function to wrap text
 def wrap_text(text, font, max_width):
     words = text.split(' ')
@@ -125,12 +58,10 @@ def wrap_text(text, font, max_width):
     return lines
 
 # Function to add text to the terminal
-def add_output(text, is_dialogue=False):
+def add_output(text):
     global output_lines
     wrapped_lines = wrap_text(text, FONT, TEXT_AREA_WIDTH - 20)
     output_lines.extend(wrapped_lines)
-    if is_dialogue:
-        speak_with_effects(text)  # Speak the line using Text-to-Speech with effects
     max_lines = (SCREEN_HEIGHT - 60) // LINE_HEIGHT  # Adjust to leave space for input
     while len(output_lines) > max_lines:
         output_lines.pop(0)
@@ -144,36 +75,36 @@ def process_command(command):
         running = False
     elif command.lower() == "look":
         if flashlight_on:
-            add_output("You see a dark, empty room. It's unsettlingly quiet. With the flashlight on, you notice a hidden door in the corner.", is_dialogue=True)
+            add_output("You see a dark, empty room. It's unsettlingly quiet. With the flashlight on, you notice a hidden door in the corner.")
         else:
-            add_output("You see a dark, empty room. It's unsettlingly quiet.", is_dialogue=True)
+            add_output("You see a dark, empty room. It's unsettlingly quiet.")
             if current_scene_items:
-                add_output("You see the following items: " + ", ".join(current_scene_items), is_dialogue=True)
+                add_output("You see the following items: " + ", ".join(current_scene_items))
             else:
-                add_output("There are no items here.", is_dialogue=True)
+                add_output("There are no items here.")
     elif command.lower() == "scream":
-        add_output("You scream into the void. Nothing happens.", is_dialogue=True)
+        add_output("You scream into the void. Nothing happens.")
     elif command.lower() == "inventory":
         if inventory:
-            add_output("You are carrying: " + ", ".join(inventory), is_dialogue=True)
+            add_output("You are carrying: " + ", ".join(inventory))
         else:
-            add_output("You are not carrying anything.", is_dialogue=True)
+            add_output("You are not carrying anything.")
     elif command.lower().startswith("take "):
         item = command[5:].strip()
         if item in current_scene_items:
             inventory.append(item)
             current_scene_items.remove(item)
-            add_output(f"You take the {item}.", is_dialogue=True)
+            add_output(f"You take the {item}.")
         else:
-            add_output(f"You can't take the {item}. It's not here.", is_dialogue=True)
+            add_output(f"You can't take the {item}. It's not here.")
     elif command.lower().startswith("drop "):
         item = command[5:].strip()
         if item in inventory:
             inventory.remove(item)
             current_scene_items.append(item)
-            add_output(f"You drop the {item}.", is_dialogue=True)
+            add_output(f"You drop the {item}.")
         else:
-            add_output("You don't have that item.", is_dialogue=True)
+            add_output("You don't have that item.")
 
     # Random chance for glitch effect
     if random.random() < 0.1:  # 10% chance
@@ -184,11 +115,11 @@ def display_intro():
     intro_text = [
         "Initializing...",
         "Loading assets...",
-        "Setting up environment...",
         "System check: OK",
         "Memory check: OK",
         "Disk check: OK",
-        "Network check: OK",
+        "Security check: --ERROR--",
+        "Overriding...",
         "Launching darkroom..."
     ]
 
@@ -200,7 +131,7 @@ def display_intro():
             text_surface = FONT.render(output_line, True, WHITE)
             screen.blit(text_surface, (10, 10 + i * LINE_HEIGHT))
         pygame.display.flip()
-        time.sleep(random.uniform(0.5, 2.5))  # Varied pause between 0.5 and 2.5 seconds
+        time.sleep(random.uniform(0.2, 1.5))  # Varied pause between 0.5 and 2.5 seconds
 
     # Display loading bar below the last line of text with varied pauses and jumps
     loading_bar = ""
@@ -209,7 +140,7 @@ def display_intro():
         if i < 10:
             time.sleep(random.uniform(0.05, 1))  # Slower updates at the beginning
         elif i < 20:
-            time.sleep(random.uniform(0.05, 1))  # Medium updates in the middle
+            time.sleep(random.uniform(0.5, 0.8))  # Medium updates in the middle
         else:
             time.sleep(random.uniform(0.001, 0.02))  # Faster updates towards the end
         screen.fill(BLACK)
