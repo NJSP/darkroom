@@ -2,8 +2,7 @@ import pygame
 import sys
 import time
 import random
-import wave
-import os
+
 
 
 # Initialize Pygame
@@ -31,30 +30,34 @@ pygame.display.set_caption("darkroom")
 command = ""
 output_lines = []
 
-# Inventory
+# Game state variables
+running = True
+matches_left = 20
+commands_since_last_match = 0
+match_lit = False
 inventory = []
+current_scene_items = []
 
 # Items in the current scene
-current_scene_items = ["flashlight", "key"]
+current_scene_items = ["Box of Matches", "key"]
 
-# Flashlight state
-flashlight_on = False
 
 # Function to wrap text
 def wrap_text(text, font, max_width):
-    words = text.split(' ')
     lines = []
-    current_line = ""
-    
-    for word in words:
-        test_line = current_line + word + " "
-        if font.size(test_line)[0] <= max_width:
-            current_line = test_line
-        else:
-            lines.append(current_line)
-            current_line = word + " "
-    
-    lines.append(current_line)
+    for paragraph in text.split('\n'):
+        words = paragraph.split(' ')
+        current_line = ""
+        
+        for word in words:
+            test_line = current_line + word + " "
+            if font.size(test_line)[0] <= max_width:
+                current_line = test_line
+            else:
+                lines.append(current_line)
+                current_line = word + " "
+        
+        lines.append(current_line)
     return lines
 
 # Function to add text to the terminal
@@ -68,35 +71,56 @@ def add_output(text):
 
 # Function to process commands
 def process_command(command):
-    global running, flashlight_on
+    global running, match_lit, matches_left, commands_since_last_match, current_scene_items
+    commands_since_last_match += 1
+
+    if match_lit and commands_since_last_match >= 5:
+        match_lit = False
+        add_output("The match goes out. The room is dark again.")
+
     if command.lower() == "help":
-        add_output("Available commands:\nhelp\nexit\nlook\nscream\ninventory\ntake <item>\ndrop <item>\nuse <item>")
+        add_output("Available commands:\nhelp\nexit\nlook\ninspect <item>\nscream\ninventory\ntake <item>\ndrop <item>\nuse <item>")
     elif command.lower() == "exit":
         running = False
     elif command.lower() == "look":
-        if flashlight_on:
-            add_output("You see a dark, empty room. It's unsettlingly quiet. With the flashlight on, you notice a hidden door in the corner.")
-        else:
-            add_output("You see a dark, empty room. It's unsettlingly quiet.")
+        if match_lit:
+            add_output("With the match lit, you see a dark, empty room. It's unsettlingly quiet. You notice a hidden door in the corner.")
             if current_scene_items:
                 add_output("You see the following items: " + ", ".join(current_scene_items))
             else:
                 add_output("There are no items here.")
+        else:
+            add_output("It's pitch black. You can't see anything.")
+    elif command.lower().startswith("inspect "):
+        item = command[8:].strip()
+        if item == "room":
+            add_output("You feel around in the dark and find a box of matches on a table.")
+            if "box of matches" not in inventory and "box of matches" not in current_scene_items:
+                current_scene_items.append("box of matches")
+        elif item == "matches":
+            if "box of matches" in inventory:
+                add_output(f"You have {matches_left} matches left in the box.")
+            else:
+                add_output("You don't have a box of matches.")
+        else:
+            add_output(f"You can't inspect {item}.")
     elif command.lower() == "scream":
         add_output("You scream into the void. Nothing happens.")
     elif command.lower() == "inventory":
         if inventory:
             add_output("You are carrying: " + ", ".join(inventory))
         else:
-            add_output("You are not carrying anything.")
+            add_output("You are carrying nothing.")
     elif command.lower().startswith("take "):
         item = command[5:].strip()
         if item in current_scene_items:
             inventory.append(item)
             current_scene_items.remove(item)
             add_output(f"You take the {item}.")
+            if item == "box of matches":
+                matches_left = 20
         else:
-            add_output(f"You can't take the {item}. It's not here.")
+            add_output(f"There is no {item} here.")
     elif command.lower().startswith("drop "):
         item = command[5:].strip()
         if item in inventory:
@@ -104,7 +128,21 @@ def process_command(command):
             current_scene_items.append(item)
             add_output(f"You drop the {item}.")
         else:
-            add_output("You don't have that item.")
+            add_output(f"You don't have a {item}.")
+    elif command.lower().startswith("use "):
+        item = command[4:].strip()
+        if item == "matches":
+            if matches_left > 0:
+                matches_left -= 1
+                match_lit = True
+                commands_since_last_match = 0
+                add_output(f"You light a match. You have {matches_left} matches left.")
+            else:
+                add_output("You have no matches left.")
+        else:
+            add_output(f"You can't use {item}.")
+    else:
+        add_output("Unknown command.")
 
     # Random chance for glitch effect
     if random.random() < 0.1:  # 10% chance
@@ -140,7 +178,7 @@ def display_intro():
         if i < 10:
             time.sleep(random.uniform(0.05, 1))  # Slower updates at the beginning
         elif i < 20:
-            time.sleep(random.uniform(0.5, 0.8))  # Medium updates in the middle
+            time.sleep(random.uniform(0.05, 0.1))  # Medium updates in the middle
         else:
             time.sleep(random.uniform(0.001, 0.02))  # Faster updates towards the end
         screen.fill(BLACK)
