@@ -4,6 +4,8 @@ import time
 import random
 import tkinter as tk
 from tkinter import messagebox
+from PIL import Image, ImageTk
+import threading
 
 
 # Initialize Pygame
@@ -21,7 +23,7 @@ BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
 
 # Fonts
-FONT = pygame.font.Font(pygame.font.match_font('courier'), 20)  # Reduced font size
+FONT = pygame.font.Font(pygame.font.match_font('courier'), 14)  # Font size
 LINE_HEIGHT = FONT.get_linesize()
 
 # Load Audio Files
@@ -34,6 +36,50 @@ audio_files = {
     "match_light": "audio/match_light.wav",
     "match_extinguish": "audio/match_extinguish.wav"
 }
+
+# Load Image Files
+door_image = pygame.image.load("images/door.jpg")
+door_image = pygame.transform.scale(door_image, (IMAGE_AREA_WIDTH, SCREEN_HEIGHT))
+doorknob_image = pygame.image.load("images/doorknob.jpg")
+doorknob_image = pygame.transform.scale(doorknob_image, (IMAGE_AREA_WIDTH, SCREEN_HEIGHT))
+creep1 = pygame.image.load("images/creep1.png")
+creep1 = pygame.transform.scale(creep1, (IMAGE_AREA_WIDTH, SCREEN_HEIGHT))
+creep2 = pygame.image.load("images/creep2.png")
+creep2 = pygame.transform.scale(creep2, (IMAGE_AREA_WIDTH, SCREEN_HEIGHT))
+creep3 = pygame.image.load("images/creep3.png")
+creep3 = pygame.transform.scale(creep3, (IMAGE_AREA_WIDTH, SCREEN_HEIGHT))
+creep4 = pygame.image.load("images/creep4.png")
+creep4 = pygame.transform.scale(creep4, (IMAGE_AREA_WIDTH, SCREEN_HEIGHT))
+
+# Variable to store the current image
+current_image = None
+
+# Function to open the image window
+def open_image_window():
+    def reopen_window():
+        root.destroy()
+        open_image_window()
+
+    root = tk.Tk()
+    root.title(" ")
+    root.geometry("400x300")
+
+    img = Image.open("images/black-eyes.jpg")
+    img = img.resize((400, 300), Image.LANCZOS)
+    photo = ImageTk.PhotoImage(img)
+
+    label = tk.Label(root, image=photo)
+    label.image = photo  # Keep a reference to avoid garbage collection
+    label.pack()
+
+    root.protocol("WM_DELETE_WINDOW", reopen_window)
+    root.mainloop()
+
+# Function to open the image window in a separate thread
+def open_image_window_thread():
+    thread = threading.Thread(target=open_image_window)
+    thread.daemon = True  # Ensure the thread exits when the main program exits
+    thread.start()
 
 # Create the screen
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
@@ -50,6 +96,7 @@ commands_since_last_match = 0
 match_lit = False
 inventory = []
 awaiting_exit_confirmation = False
+first_match_lit = False
 
 
 # Items in the current scene
@@ -90,13 +137,16 @@ def add_output(text, audio_key=None):
 
 # Function to process commands
 def process_command(command):
-    global running, match_lit, matches_left, commands_since_last_match, current_scene_items, awaiting_exit_confirmation
+    global running, match_lit, first_match_lit, matches_left, commands_since_last_match, current_scene_items, awaiting_exit_confirmation
     commands_since_last_match += 1
 
     if match_lit and commands_since_last_match >= 5:
         match_lit = False
         add_output("The match goes out. The room is dark again.")
     
+    if current_image:
+        screen.blit(current_image, (TEXT_AREA_WIDTH, 0))
+
     if awaiting_exit_confirmation:
         if command.lower() in ["y", "yes"]:
             add_output("That's nice.", "exit_yes")
@@ -172,12 +222,15 @@ def process_command(command):
             add_output(f"You don't have a {item}.")
     elif command.lower().startswith("use "):            # Use Command
         item = command[4:].strip()
-        if item == "matches":
+        if item in ["matches", "match", "box of matches", "matchbox"]:
             if matches_left > 0:
                 matches_left -= 1
                 match_lit = True
                 commands_since_last_match = 0
                 add_output(f"You light a match. The room is illuminated.")
+                if not first_match_lit:
+                    first_match_lit = True
+                    open_image_window_thread()
             else:
                 add_output("You have no matches left.")
         else:
@@ -198,6 +251,17 @@ def open_door_window():
 
     button = tk.Button(root, text="Close", command=root.destroy)
     button.pack(pady=20)
+
+    root.mainloop()
+
+# Function to open a message window using tkinter
+def open_message_window():
+    root = tk.Tk()
+    root.title("YOU ARE STILL HERE")
+    root.geometry("300x200")
+
+    label = tk.Label(root, text="NOBODY LEAVES THE DARKROOM NOBODY LEAVES THE DARKROOM NOBODY LEAVES THE DARKROOM NOBODY LEAVES THE DARKROOM NOBODY LEAVES THE DARKROOM NOBODY LEAVES THE DARKROOM", font=("Courier", 14))
+    label.pack(pady=20)
 
     root.mainloop()
 
@@ -276,38 +340,40 @@ def display_glitch():
     print("Glitch effect displayed successfully.")
 
 # Main game loop
-running = True
-display_intro()  # Display the intro sequence
-output_lines.clear()  # Clear the intro text before starting the main game
-while running:
-    screen.fill(BLACK)
+def main():
+    running = True
+    display_intro()  # Display the intro sequence
+    output_lines.clear()  # Clear the intro text before starting the main game
+    while running:
+        screen.fill(BLACK)
 
-    # Draw output lines
-    for i, line in enumerate(output_lines):
-        text_surface = FONT.render(line, True, WHITE)
-        screen.blit(text_surface, (10, 10 + i * LINE_HEIGHT))
+        # Draw output lines
+        for i, line in enumerate(output_lines):
+            text_surface = FONT.render(line, True, WHITE)
+            screen.blit(text_surface, (10, 10 + i * LINE_HEIGHT))
 
-    # Draw command input
-    command_surface = FONT.render("> " + command, True, WHITE)
-    screen.blit(command_surface, (10, SCREEN_HEIGHT - 50))
+        # Draw command input
+        command_surface = FONT.render("> " + command, True, WHITE)
+        screen.blit(command_surface, (10, SCREEN_HEIGHT - 50))
 
-    # Draw image placeholder
-    pygame.draw.rect(screen, WHITE, (TEXT_AREA_WIDTH, 0, IMAGE_AREA_WIDTH, SCREEN_HEIGHT), 2)
+        # Draw image placeholder
+        pygame.draw.rect(screen, WHITE, (TEXT_AREA_WIDTH, 0, IMAGE_AREA_WIDTH, SCREEN_HEIGHT), 2)
 
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
-        elif event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_RETURN:
-                add_output("> " + command)
-                process_command(command)
-                command = ""
-            elif event.key == pygame.K_BACKSPACE:
-                command = command[:-1]
-            else:
-                command += event.unicode
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+                open_message_window()
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_RETURN:
+                    add_output("> " + command)
+                    process_command(command)
+                    command = ""
+                elif event.key == pygame.K_BACKSPACE:
+                    command = command[:-1]
+                else:
+                    command += event.unicode
 
-    pygame.display.flip()
+        pygame.display.flip()
 
 pygame.quit()
 sys.exit()
